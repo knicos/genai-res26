@@ -115,13 +115,7 @@ function renderRecord(record, categories) {
   const items = classifications(record);
   const tags = element("div", "tags");
   for (const item of items.filter((item) => item.label === "yes")) {
-    tags.append(
-      element(
-        "span",
-        "tag",
-        item.category,
-      ),
-    );
+    tags.append(element("span", "tag", item.category));
   }
   if (tags.childElementCount) card.append(tags);
   const evidenceItems = categories.length
@@ -204,7 +198,7 @@ async function load() {
     }
     const errorCount = records.filter((record) => analysisError(record)).length;
     document.querySelector("#dataset-summary").textContent =
-      `${records.length} records · ${records.length - errorCount} analysed · ${errorCount} with errors. Repeated URLs are retained as separate source records.`;
+      `${records.length} records · ${records.length - errorCount} analysed · ${errorCount} with errors.`;
     form.querySelectorAll("input, select, button").forEach((control) => {
       control.disabled = false;
     });

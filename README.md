@@ -16,6 +16,12 @@ No build, dependencies, API keys, or backend are required. Asset and data paths 
 
 **Review the dataset before publication:** GitHub Pages exposes the JSONL file publicly, including fields not displayed in the interface. The supplied records include local source file paths. Remove any private source metadata before publishing if needed.
 
+## Customize the theme
+
+Edit the color variables in the `:root` block at the top of [styles.css](./styles.css). They control page and panel backgrounds, text, accents, borders, focus outlines, and success/error states. Related elements share variables, so no other color edits are needed. For a dark theme, also change `color-scheme: light` to `color-scheme: dark` to match native form controls.
+
+The default palette is inspired by [Generation AI](https://gen-ai.fi/en): teal accents, charcoal text, pale-blue backgrounds, and soft teal/lavender surfaces. `--brand` controls the large title; the darker `--accent` keeps small links readable. Andika is used if installed locally, with system fonts otherwise; no external font requests are made.
+
 ## Data and score interpretation
 
 Each nonblank line in `results.jsonl` must be a JSON object with a `url`, plus `analysis.classifications` or an `error`. The supplied metadata keys are `Initiative / Programme`, `Description`, and `Country / Origin`. Analysis may include a `summary`. Classifications contain `category`, `label` (`yes`, `no`, or `unknown`), `score` (0–1), and `reason`. Errors contain `type` and `message`.

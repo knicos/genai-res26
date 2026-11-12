@@ -1,25 +1,33 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Search and explore AI literacy initiatives, resources, and websites by category.">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Search and explore AI literacy initiatives, resources, and websites by category."
+    />
     <title>AI Literacy | Research directory</title>
-    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./app.mjs"></script>
   </head>
   <body>
     <header class="site-header">
       <div class="page-width header-inner">
-        <a class="brand" href="./">AI Literacy <span>Research directory</span></a>
+        <a class="brand" href="./"
+          >AI Literacy <span>Resource directory</span></a
+        >
         <a class="data-link" href="./results.jsonl" download>Download JSONL</a>
       </div>
     </header>
     <main class="page-width">
       <section class="intro" aria-labelledby="page-title">
         <p class="eyebrow">RESOURCE INDEX</p>
-        <h1 id="page-title">Explore AI literacy resources</h1>
-        <p>Find initiatives, frameworks, and teaching resources. Search the index and explore the evidence behind each category.</p>
+        <h1 id="page-title">Explore AI literacy resources (2026)</h1>
+        <p>
+          Find initiatives, frameworks, and teaching resources for AI literacy
+          in 2026.
+        </p>
         <p id="dataset-summary" class="dataset-summary">Loading directory…</p>
       </section>
       <div class="directory">
@@ -30,10 +38,17 @@
               <button type="reset" class="text-button">Reset</button>
             </div>
             <label for="search">Search resources</label>
-            <input id="search" type="search" placeholder="Name, topic, country, or URL…" autocomplete="off">
-            <fieldset class="classification-filter" aria-describedby="category-help">
+            <input
+              id="search"
+              type="search"
+              placeholder="Name, topic, country, or URL…"
+              autocomplete="off"
+            />
+            <fieldset
+              class="classification-filter"
+              aria-describedby="category-help"
+            >
               <legend>Categories</legend>
-              <p id="category-help" class="help">Match every selected category with a “yes” classification. Leave all unchecked to show all categories.</p>
               <div id="categories" class="classification-options"></div>
             </fieldset>
             <label for="status">Analysis status</label>
@@ -42,13 +57,13 @@
               <option value="analysed">Analysed only</option>
               <option value="errors">Errors only</option>
             </select>
-            <div class="filter-note">
-              <strong>About the scores</strong>
-              <p>Scores are model confidence, not resource quality. With no category selected, the highest “yes” score is used. Otherwise, confidence is the arithmetic mean of the selected categories’ “yes” scores. Results are always highest confidence first, with unscored records last. Records with all categories classified as “unknown” count as analysis errors.</p>
-            </div>
           </form>
         </aside>
-        <section class="results" aria-labelledby="results-title" aria-busy="true">
+        <section
+          class="results"
+          aria-labelledby="results-title"
+          aria-busy="true"
+        >
           <div class="results-heading">
             <h2 id="results-title">Directory</h2>
             <p id="result-count" role="status" aria-live="polite">Loading…</p>
@@ -60,16 +75,27 @@
           </div>
           <div id="empty" class="notice" hidden>
             <h3>No matching resources</h3>
-            <p>Try a broader search or reset your filters. Error records may not match any category; clear all category selections to see them.</p>
+            <p>
+              Try a broader search or reset your filters. Error records may not
+              match any category; clear all category selections to see them.
+            </p>
             <button type="button" id="empty-reset">Reset filters</button>
           </div>
           <div id="result-list"></div>
         </section>
       </div>
-      <noscript><p class="notice">JavaScript is required to search this directory. You can also <a href="./results.jsonl">download the source data</a>.</p></noscript>
+      <noscript
+        ><p class="notice">
+          JavaScript is required to search this directory. You can also
+          <a href="./results.jsonl">download the source data</a>.
+        </p></noscript
+      >
     </main>
     <footer class="page-width">
-      <p>For research and discovery. Classifications are model-generated; verify details at the original source.</p>
+      <p>
+        For research and discovery. Classifications are model-generated; verify
+        details at the original source.
+      </p>
     </footer>
   </body>
 </html>
