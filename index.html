@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Search and explore AI literacy initiatives, resources, and websites by category."
+      content="Explore the Atlas of AI Literacy Initiatives. Search initiatives by category and discover connections across the AI literacy landscape."
     />
-    <title>AI Literacy | Research directory</title>
+    <title>Atlas of AI Literacy Initiatives</title>
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./app.mjs"></script>
   </head>
@@ -15,21 +15,73 @@
     <header class="site-header">
       <div class="page-width header-inner">
         <a class="brand" href="./"
-          >AI Literacy <span>Resource directory</span></a
+          >AI Literacy <span>Initiatives Atlas</span></a
         >
         <a class="data-link" href="./results.jsonl" download>Download JSONL</a>
       </div>
     </header>
     <main class="page-width">
       <section class="intro" aria-labelledby="page-title">
-        <p class="eyebrow">RESOURCE INDEX</p>
-        <h1 id="page-title">Explore AI literacy resources (2026)</h1>
+        <p class="eyebrow">2026 EDITION</p>
+        <h1 id="page-title">Atlas of AI Literacy Initiatives</h1>
         <p>
-          Find initiatives, frameworks, and teaching resources for AI literacy
-          in 2026.
+          Discover AI literacy initiatives, explore their focus areas, and find
+          connections across the AI literacy landscape.
         </p>
-        <p id="dataset-summary" class="dataset-summary">Loading directory…</p>
+        <p id="dataset-summary" class="dataset-summary">Loading atlas…</p>
       </section>
+      <details class="cluster-panel" open>
+        <summary>Explore the atlas</summary>
+        <div class="visualisation-tabs" role="tablist" aria-label="Atlas visualisations">
+          <button type="button" id="matrix-tab" role="tab" aria-selected="true" aria-controls="matrix-panel">Category matrix</button>
+          <button type="button" id="map-tab" role="tab" aria-selected="false" aria-controls="map-panel" tabindex="-1">Initiative map</button>
+        </div>
+        <div id="matrix-panel" role="tabpanel" aria-labelledby="matrix-tab">
+        <p id="heatmap-status" class="help">Loading category overlaps…</p>
+        <div
+          id="heatmap"
+          class="heatmap-scroll"
+          role="region"
+          aria-label="Category overlap matrix"
+          tabindex="0"
+        ></div>
+        <div id="heatmap-legend" class="heatmap-legend" hidden>
+          <span>0 records</span
+          ><span class="heatmap-scale" aria-hidden="true"></span
+          ><span id="heatmap-maximum"></span>
+        </div>
+        <p id="heatmap-detail" class="help" role="status" aria-live="polite">
+          Hover over or focus a cell to see its categories and count.
+        </p>
+        </div>
+        <div id="map-panel" role="tabpanel" aria-labelledby="map-tab" hidden>
+          <label for="map-mode">Similarity comparison</label>
+          <select id="map-mode" disabled>
+            <option value="binary">Binary categories (ignore confidence)</option>
+            <option value="confidence">Labels + confidence</option>
+          </select>
+          <label for="map-cluster-count">Number of clusters</label>
+          <select id="map-cluster-count" disabled>
+            <option value="auto">Auto</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+          </select>
+          <p id="map-status" class="help">Loading initiative profiles…</p>
+          <div id="map-controls" class="map-controls" role="group" aria-label="Map navigation" hidden>
+            <button type="button" data-action="out" aria-label="Zoom out">−</button>
+            <output aria-label="Zoom level" aria-live="polite">100%</output>
+            <button type="button" data-action="in" aria-label="Zoom in">+</button>
+            <button type="button" data-action="reset">Reset view</button>
+          </div>
+          <div id="initiative-map" class="initiative-map"></div>
+          <ul id="map-clusters" class="map-clusters" aria-label="Initiative clusters"></ul>
+          <div id="map-selection" class="map-selection" aria-live="polite"></div>
+        </div>
+      </details>
       <div class="directory">
         <aside aria-labelledby="filters-title">
           <form id="filters">
@@ -37,7 +89,7 @@
               <h2 id="filters-title">Refine results</h2>
               <button type="reset" class="text-button">Reset</button>
             </div>
-            <label for="search">Search resources</label>
+            <label for="search">Search initiatives</label>
             <input
               id="search"
               type="search"
@@ -65,16 +117,16 @@
           aria-busy="true"
         >
           <div class="results-heading">
-            <h2 id="results-title">Directory</h2>
+            <h2 id="results-title" tabindex="-1">Initiatives</h2>
             <p id="result-count" role="status" aria-live="polite">Loading…</p>
           </div>
           <div id="load-error" class="notice error-notice" role="alert" hidden>
-            <h3>Unable to load the directory</h3>
+            <h3>Unable to load the atlas</h3>
             <p id="load-error-message"></p>
             <button type="button" id="retry">Try again</button>
           </div>
           <div id="empty" class="notice" hidden>
-            <h3>No matching resources</h3>
+            <h3>No matching initiatives</h3>
             <p>
               Try a broader search or reset your filters. Error records may not
               match any category; clear all category selections to see them.
@@ -82,11 +134,29 @@
             <button type="button" id="empty-reset">Reset filters</button>
           </div>
           <div id="result-list"></div>
+          <nav
+            id="pagination"
+            class="pagination"
+            aria-label="Result pages"
+            hidden
+          >
+            <button
+              type="button"
+              id="previous-page"
+              aria-controls="result-list"
+            >
+              Previous
+            </button>
+            <span id="page-indicator"></span>
+            <button type="button" id="next-page" aria-controls="result-list">
+              Next
+            </button>
+          </nav>
         </section>
       </div>
       <noscript
         ><p class="notice">
-          JavaScript is required to search this directory. You can also
+          JavaScript is required to search this atlas. You can also
           <a href="./results.jsonl">download the source data</a>.
         </p></noscript
       >

@@ -1,5 +1,5 @@
 :root {
-  /* Edit these colors to theme the directory. */
+  /* Edit these colors to theme the atlas. */
   --background: #f4faff;
   --surface: #fff;
   --surface-muted: #b3d7d8;
@@ -21,6 +21,12 @@
   --error-background: #fff0e3;
   --error-surface: #fff8f1;
   --error-border: #d1a172;
+  --cluster-1: #007f86;
+  --cluster-2: #9862a6;
+  --cluster-3: #b96a25;
+  --cluster-4: #356db4;
+  --cluster-5: #a53d65;
+  --cluster-6: #59813b;
 
   color-scheme: light;
   font-family: Andika, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -61,6 +67,41 @@ h3 a:hover { text-decoration: underline; }
 .directory { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 36px; align-items: start; }
 aside, .result-card, .notice { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; }
 aside { padding: 22px; }
+.cluster-panel { padding: 24px; margin-bottom: 32px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); }
+.cluster-panel > summary { font-weight: 700; font-size: 1.1rem; }
+.visualisation-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border); margin-block: 16px; }
+.visualisation-tabs button { padding: 10px 14px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--accent); }
+.visualisation-tabs [aria-selected="true"] { border-color: var(--accent); font-weight: 700; }
+.initiative-map { overflow-x: auto; }
+.initiative-map svg { display: block; width: 100%; min-height: 280px; background: var(--background); border: 1px solid var(--border); border-radius: 12px; margin-top: 16px; touch-action: none; user-select: none; cursor: grab; }
+.initiative-map svg:active { cursor: grabbing; }
+.map-point { fill: var(--point-color); stroke: var(--surface); stroke-width: 1.5; cursor: pointer; vector-effect: non-scaling-stroke; }
+.map-point:hover, .map-point[aria-pressed="true"] { stroke: var(--text); stroke-width: 2.5; }
+.map-controls { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+.map-controls button { border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface); color: var(--accent); padding: 6px 12px; }
+.map-controls button:disabled { opacity: .5; cursor: default; }
+.map-clusters { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; padding: 0; font-size: .8rem; }
+.map-clusters li { display: grid; grid-template-columns: 12px 1fr; gap: 4px 8px; }
+.cluster-swatch { width: 12px; height: 12px; margin-top: 6px; border-radius: 50%; background: var(--point-color); }
+.map-clusters small { grid-column: 2; color: var(--text-muted); }
+.map-selection { margin-top: 16px; max-height: 260px; overflow-y: auto; overflow-wrap: anywhere; }
+.map-selection ul { padding-left: 20px; }
+.map-selection p { font-size: .85rem; margin-top: 4px; color: var(--text-muted); }
+.heatmap-scroll { overflow-x: auto; margin-top: 16px; }
+.heatmap-table { border-spacing: 3px; margin-inline: auto; font-size: .7rem; }
+.heatmap-table th { font-weight: 650; }
+.heatmap-table thead th { height: 140px; vertical-align: bottom; padding-bottom: 8px; }
+.heatmap-table thead span { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+.heatmap-table tbody th { text-align: right; white-space: nowrap; padding-right: 10px; }
+.heatmap-table td { padding: 0; }
+.heatmap-cell { width: 42px; height: 32px; border: 0; border-radius: 4px; background: var(--background); color: var(--text); font-size: .7rem; }
+.heatmap-cell[data-level="1"] { background: color-mix(in srgb, var(--accent) 15%, var(--surface)); }
+.heatmap-cell[data-level="2"] { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); }
+.heatmap-cell[data-level="3"] { background: color-mix(in srgb, var(--accent) 80%, var(--surface)); color: var(--on-accent); }
+.heatmap-cell[data-level="4"] { background: var(--accent); color: var(--on-accent); }
+.heatmap-cell:hover, .heatmap-cell[aria-pressed="true"] { outline: 2px solid var(--focus); outline-offset: 1px; }
+.heatmap-legend { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 16px; font-size: .75rem; }
+.heatmap-scale { width: 140px; height: 12px; background: linear-gradient(to right, var(--background), var(--accent)); border-radius: 4px; }
 .filter-heading, .results-heading, .card-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
 .text-button { padding: 0; background: none; border: 0; text-decoration: underline; font-size: .8rem; }
 label, .classification-filter legend { font-size: .8rem; font-weight: 650; }
@@ -81,6 +122,11 @@ select:disabled { background: var(--surface-muted); color: var(--text-muted); cu
 
 .results-heading { margin: 0 0 16px; min-height: 29px; }
 .results-heading p { font-size: .8rem; margin: 0; }
+.results-heading { flex-wrap: wrap; }
+.pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 24px; font-size: .85rem; }
+.pagination button { border: 1px solid var(--accent); border-radius: 5px; padding: 8px 12px; background: var(--surface); color: var(--accent); }
+.pagination button:hover:not(:disabled) { background: var(--surface-hover); }
+.pagination button:disabled { border-color: var(--border); color: var(--text-muted); cursor: default; }
 .result-card { padding: 24px; margin-bottom: 16px; }
 .badge { flex-shrink: 0; font-size: .7rem; font-weight: 650; border-radius: 12px; padding: 4px 10px; white-space: nowrap; }
 .score-badge { color: var(--success); background: var(--success-background); }
