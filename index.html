@@ -17,7 +17,9 @@
         <a class="brand" href="./"
           >AI Literacy <span>Initiatives Atlas</span></a
         >
-        <a class="data-link" href="./results.jsonl" download>Download JSONL</a>
+        <a class="data-link" href="./results.jsonl" download>
+          <svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#download"></use></svg>
+          Download JSONL</a>
       </div>
     </header>
     <main class="page-width">
@@ -31,13 +33,44 @@
         <p id="dataset-summary" class="dataset-summary">Loading atlas…</p>
         <div id="group-legend" class="group-legend" role="group" aria-label="Classification groups"></div>
       </section>
-      <details class="matrix-panel" open>
-        <summary>Category matrix</summary>
+      <details class="chart-panel">
+        <summary>Classification totals</summary>
+        <p id="chart-status" class="help">Loading classification totals…</p>
+        <div class="matrix-controls">
+          <label class="classification-option">
+            <input id="group-chart-labels" type="checkbox" checked disabled />
+            <span>Group labels by category</span>
+          </label>
+          <button id="chart-reset" type="button" class="text-button" disabled
+            aria-label="Reset chart category selections">Reset</button>
+        </div>
+        <fieldset id="chart-groups" class="matrix-axis-options" disabled>
+          <legend>Label categories</legend>
+        </fieldset>
+        <p class="help">Positive classifications per label. Select a bar to add its category to the search filters.</p>
+        <div id="bar-chart" role="group" aria-label="Initiatives classified yes per label"></div>
+      </details>
+      <details class="matrix-panel">
+        <summary><svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#matrix"></use></svg>Classification matrix</summary>
         <p id="heatmap-status" class="help">Loading category overlaps…</p>
-        <label class="classification-option">
-          <input id="group-matrix-labels" type="checkbox" checked disabled />
-          <span>Group labels by category</span>
-        </label>
+        <div class="matrix-controls">
+          <label class="classification-option">
+            <input id="group-matrix-labels" type="checkbox" checked disabled />
+            <span>Group labels by category</span>
+          </label>
+          <button id="matrix-reset" type="button" class="text-button" disabled
+            aria-label="Reset matrix category selections">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#refresh"></use></svg>
+            Reset</button>
+        </div>
+        <div class="matrix-axis-settings" role="group" aria-label="Matrix label categories">
+          <fieldset id="matrix-rows" class="matrix-axis-options" disabled>
+            <legend>Rows</legend>
+          </fieldset>
+          <fieldset id="matrix-columns" class="matrix-axis-options" disabled>
+            <legend>Columns</legend>
+          </fieldset>
+        </div>
         <div
           id="heatmap"
           class="heatmap-scroll"
@@ -54,14 +87,17 @@
           Hover over or focus a cell to see its categories and count.
         </p>
       </details>
+      <div id="matrix-info" class="matrix-info" aria-hidden="true" hidden></div>
       <div class="directory">
         <aside aria-labelledby="filters-title">
           <form id="filters">
             <div class="filter-heading">
-              <h2 id="filters-title">Refine results</h2>
-              <button type="reset" class="text-button">Reset</button>
+              <h2 id="filters-title"><svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#filters"></use></svg> Refine results</h2>
+              <button type="reset" class="text-button">
+                <svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#refresh"></use></svg>
+                Reset</button>
             </div>
-            <label for="search">Search initiatives</label>
+            <label for="search"><svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#search"></use></svg> Search initiatives</label>
             <input
               id="search"
               type="search"
@@ -82,11 +118,8 @@
               <option value="analysed">Analysed only</option>
               <option value="errors">Errors only</option>
               <option value="pending">Not yet analysed</option>
+              <option value="excluded">Excluded only</option>
             </select>
-            <label class="classification-option">
-              <input id="include-excluded" type="checkbox" />
-              <span>Include excluded initiatives</span>
-            </label>
           </form>
         </aside>
         <section
@@ -101,16 +134,16 @@
           <div id="load-error" class="notice error-notice" role="alert" hidden>
             <h3>Unable to load the atlas</h3>
             <p id="load-error-message"></p>
-            <button type="button" id="retry">Try again</button>
+            <button type="button" id="retry"><svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#refresh"></use></svg> Try again</button>
           </div>
           <div id="empty" class="notice" hidden>
             <h3>No matching initiatives</h3>
             <p>
               Try a broader search or reset your filters. Error records may not
               match any category; clear all category selections to see them.
-              To search excluded initiatives, select "Include excluded initiatives".
+              To search excluded initiatives, choose "Excluded only" under Analysis status.
             </p>
-            <button type="button" id="empty-reset">Reset filters</button>
+            <button type="button" id="empty-reset"><svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#refresh"></use></svg> Reset filters</button>
           </div>
           <div id="result-list"></div>
           <nav
@@ -124,11 +157,13 @@
               id="previous-page"
               aria-controls="result-list"
             >
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#previous"></use></svg>
               Previous
             </button>
             <span id="page-indicator"></span>
             <button type="button" id="next-page" aria-controls="result-list">
               Next
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#next"></use></svg>
             </button>
           </nav>
         </section>

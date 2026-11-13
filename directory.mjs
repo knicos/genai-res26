@@ -107,12 +107,12 @@ export function safeURL(value) {
   }
 }
 
-export function filterRecords(records, { query = "", categories = [], status = "all", includeExcluded = false } = {}) {
+export function filterRecords(records, { query = "", categories = [], status = "all" } = {}) {
   const terms = query.toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
   return records.filter(record => {
-    if (!includeExcluded && isExcluded(record)) return false;
+    if (status === "excluded" ? !isExcluded(record) : isExcluded(record)) return false;
     const error = analysisError(record);
-    if (status !== "all" && analysisStatus(record) !== status) return false;
+    if (status !== "all" && status !== "excluded" && analysisStatus(record) !== status) return false;
     if (!categories.every(category => classifications(record).some(item => item.category === category && item.label === "yes"))) return false;
     const text = [
       resourceName(record), record.url, ...Object.values(record.metadata || {}),

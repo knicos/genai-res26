@@ -99,6 +99,90 @@ test("every dataset cell equals the independent analysed positive intersection",
   }
 });
 
+test("filtered counts retain unfiltered labels and density order in both grouping modes", () => {
+  const records = [
+    record("Company", "Teachers", "Using AI"),
+    record("Company", "Adult Education", "Understanding AI"),
+    record("Government or Statutory Body", "Adult Education", "Understanding AI"),
+    record("Adult Education", "Understanding AI"),
+    { ...record("Excluded"), inclusion: { include: "no" } },
+  ];
+  for (const groupByCategory of [true, false]) {
+    const baseline = categoryOverlap(records, { groupByCategory });
+    const filtered = categoryOverlap([records[0]], { groupByCategory, referenceRecords: records });
+    assert.deepEqual(filtered.categories, baseline.categories);
+    assert.equal(filtered.analysedCount, 1);
+    for (const [i, a] of filtered.categories.entries()) {
+      for (const [j, b] of filtered.categories.entries()) {
+        assert.equal(filtered.counts[i][j], ["Company", "Teachers", "Using AI"].includes(a)
+          && ["Company", "Teachers", "Using AI"].includes(b) ? 1 : 0);
+      }
+    }
+    const empty = categoryOverlap([], { groupByCategory, referenceRecords: records });
+    assert.deepEqual(empty.categories, baseline.categories);
+    assert.ok(empty.counts.flat().every(count => count === 0));
+    assert.equal(empty.analysedCount, 0);
+    assert.ok(!empty.categories.includes("Excluded"));
+  }
+});
+
+test("column group options project columns without changing rows or analysed records", () => {
+  const records = [
+    record("Company", "Teachers", "Using AI"),
+    record("Company", "Frameworks and Standards", "Using AI"),
+    record("Teachers", "New category"),
+    { ...record("Excluded"), inclusion: { include: "no" } },
+    { ...record("Failed"), error: "Failed" },
+  ];
+  for (const groupByCategory of [true, false]) {
+    const full = categoryOverlap(records, { groupByCategory });
+    for (const columnGroups of [
+      ["audience", "type", "topic"], ["producer"], ["topic"], ["ungrouped"], [],
+    ]) {
+      const result = categoryOverlap(records, { groupByCategory, columnGroups });
+      assert.deepEqual(result.categories, full.categories);
+      assert.equal(result.analysedCount, 3);
+      assert.equal(result.excludedCount, 2);
+      const expected = {
+        producer: ["Company"], audience: ["Teachers"],
+        type: ["Frameworks and Standards"], topic: ["Using AI"], ungrouped: ["New category"],
+      };
+      assert.deepEqual(result.columnCategories, full.categories.filter(category =>
+        columnGroups.some(group => expected[group].includes(category)),
+      ));
+      for (const [i, row] of result.counts.entries()) {
+        assert.deepEqual(row, result.columnCategories.map(category =>
+          full.counts[i][full.columnCategories.indexOf(category)],
+        ));
+      }
+    }
+    assert.deepEqual(full.columnCategories, full.categories);
+  }
+});
+
+test("row and column groups can be selected independently without altering counts", () => {
+  const records = [record("Company", "Teachers", "Using AI"), record("Teachers", "Understanding AI")];
+  for (const groupByCategory of [true, false]) {
+    const full = categoryOverlap(records, { groupByCategory });
+    for (const rowGroups of [["producer"], ["audience", "topic"], [], ["ungrouped"]]) {
+      const selected = categoryOverlap(records, { groupByCategory, rowGroups, columnGroups: ["topic"] });
+      assert.deepEqual(selected.columnCategories, full.columnCategories.filter(category =>
+        ["Using AI", "Understanding AI"].includes(category),
+      ));
+      const expectedRows = full.categories.filter(category =>
+        (rowGroups.includes("producer") && category === "Company")
+        || (rowGroups.includes("audience") && category === "Teachers")
+        || (rowGroups.includes("topic") && ["Using AI", "Understanding AI"].includes(category)),
+      );
+      assert.deepEqual(selected.categories, expectedRows);
+      assert.deepEqual(selected.counts, expectedRows.map(a => selected.columnCategories.map(b =>
+        full.counts[full.categories.indexOf(a)][full.columnCategories.indexOf(b)],
+      )));
+      assert.equal(selected.analysedCount, full.analysedCount);
+    }
+  }
+});
+
 test("excludes pending records and round errors while retaining successful partial analyses", () => {
   const pending = { classifications: [], roundStatus: {} };
   const failed = { ...record("Error only"), roundStatus: { "4": { status: "retry", error: { message: "Failed" } } } };

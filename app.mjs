@@ -17,7 +17,6 @@ const form = document.querySelector("#filters");
 const search = document.querySelector("#search");
 const categoryOptions = document.querySelector("#categories");
 const status = document.querySelector("#status");
-const includeExcluded = document.querySelector("#include-excluded");
 const list = document.querySelector("#result-list");
 const empty = document.querySelector("#empty");
 const loadError = document.querySelector("#load-error");
@@ -29,6 +28,14 @@ const nextPage = document.querySelector("#next-page");
 const pageIndicator = document.querySelector("#page-indicator");
 const heatmap = document.querySelector("#heatmap");
 const groupMatrixLabels = document.querySelector("#group-matrix-labels");
+const matrixReset = document.querySelector("#matrix-reset");
+const matrixColumns = document.querySelector("#matrix-columns");
+const matrixRows = document.querySelector("#matrix-rows");
+const matrixInfo = document.querySelector("#matrix-info");
+const barChart = document.querySelector("#bar-chart");
+const chartGroups = document.querySelector("#chart-groups");
+const groupChartLabels = document.querySelector("#group-chart-labels");
+const chartReset = document.querySelector("#chart-reset");
 const pageSize = 25;
 let records = [];
 let currentPage = 1;
@@ -36,21 +43,69 @@ let hoveredHeatmapCell = null;
 let focusedHeatmapCell = null;
 let selectedHeatmapCell = null;
 
-function renderHeatmap(matches) {
+function renderBarChart() {
+  const { categories, counts, analysedCount } = categoryOverlap(records, {
+    groupByCategory: groupChartLabels.checked,
+  });
+  const enabled = [...chartGroups.querySelectorAll("input:checked")].map(input => input.value);
+  const maximum = Math.max(0, ...counts.map((row, i) => row[i]));
+  document.querySelector("#chart-status").textContent =
+    `${analysedCount} analysed initiatives · independent of search filters`;
+  barChart.replaceChildren();
+  categories.forEach((category, i) => {
+    const group = categoryGroup(category);
+    if (!enabled.includes(group?.id || "ungrouped")) return;
+    const count = counts[i][i];
+    const button = element("button", "chart-bar");
+    button.type = "button";
+    button.dataset.category = category;
+    if (group) button.dataset.group = group.id;
+    button.setAttribute("aria-label", `${group?.name || "Ungrouped"}: ${category}, ${count} analysed ${count === 1 ? "initiative" : "initiatives"}`);
+    const track = element("span", "chart-track");
+    track.setAttribute("aria-hidden", "true");
+    const fill = element("span", "chart-fill");
+    fill.style.width = `${maximum ? count / maximum * 100 : 0}%`;
+    track.append(fill);
+    button.append(element("span", "chart-label", category), track, element("span", "chart-value", count));
+    button.addEventListener("click", () => {
+      categoryOptions.querySelectorAll("input").forEach(input => {
+        if (input.value === category) input.checked = true;
+      });
+      status.value = "analysed";
+      resetPage();
+      document.querySelector("#results-title").focus();
+      results.scrollIntoView({ block: "start" });
+    });
+    barChart.append(button);
+  });
+  if (!barChart.childElementCount) {
+    barChart.append(element("p", "help", "No labels available. Enable a label category or load analysed data."));
+  }
+}
+
+function renderHeatmap() {
+  matrixInfo.hidden = true;
+  const selectedPair = selectedHeatmapCell?.dataset.categories;
   hoveredHeatmapCell = null;
   focusedHeatmapCell = null;
   selectedHeatmapCell = null;
-  const { categories, counts, analysedCount } = categoryOverlap(matches, {
+  const { categories, columnCategories, counts, analysedCount } = categoryOverlap(records, {
     groupByCategory: groupMatrixLabels.checked,
+    columnGroups: [...matrixColumns.querySelectorAll("input:checked")].map(input => input.value),
+    rowGroups: [...matrixRows.querySelectorAll("input:checked")].map(input => input.value),
   });
   document.querySelector("#heatmap-status").textContent =
-    `${analysedCount} matching analysed initiatives`;
+    `${analysedCount} analysed initiatives · independent of search filters`;
   heatmap.replaceChildren();
   const maximum = Math.max(0, ...counts.flat());
-  document.querySelector("#heatmap-legend").hidden = !categories.length;
+  document.querySelector("#heatmap-legend").hidden = !categories.length || !columnCategories.length;
   document.querySelector("#heatmap-maximum").textContent = `${maximum} records`;
   if (!categories.length) {
-    heatmap.append(element("p", "help", "No analysed categories match the current filters."));
+    heatmap.append(element("p", "help", "No row labels available. Enable a row label category or load analysed data."));
+    return;
+  }
+  if (!columnCategories.length) {
+    heatmap.append(element("p", "help", "Enable a column label category to display the matrix."));
     return;
   }
   const table = element("table", "heatmap-table");
@@ -58,10 +113,11 @@ function renderHeatmap(matches) {
   const head = element("thead");
   const header = element("tr");
   header.append(element("td"));
-  for (const category of categories) {
+  for (const category of columnCategories) {
     const cell = element("th");
     cell.scope = "col";
     markCategory(cell, category);
+    cell.dataset.category = category;
     cell.append(element("span", "", category));
     header.append(cell);
   }
@@ -70,11 +126,13 @@ function renderHeatmap(matches) {
   const body = element("tbody");
   categories.forEach((a, row) => {
     const tr = element("tr");
-    const heading = element("th", "", a);
+    const heading = element("th");
+    heading.append(element("span", "", a));
     heading.scope = "row";
     markCategory(heading, a);
+    heading.dataset.category = a;
     tr.append(heading);
-    categories.forEach((b, column) => {
+    columnCategories.forEach((b, column) => {
       const count = counts[row][column];
       const cell = element("td");
       const button = element("button", "heatmap-cell", count);
@@ -86,7 +144,6 @@ function renderHeatmap(matches) {
       button.dataset.column = column;
       const description = `${pair.join(" + ")}: ${count} analysed ${count === 1 ? "record" : "records"}`;
       button.setAttribute("aria-label", description);
-      button.title = description;
       button.dataset.level = count ? Math.ceil((count / maximum) * 4) : 0;
       button.addEventListener("mouseenter", () => {
         hoveredHeatmapCell = button;
@@ -109,6 +166,11 @@ function renderHeatmap(matches) {
         updateHeatmapHighlight();
       });
       button.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          matrixInfo.hidden = true;
+          event.preventDefault();
+          return;
+        }
         const offsets = {
           ArrowUp: [-1, 0],
           ArrowDown: [1, 0],
@@ -124,7 +186,7 @@ function renderHeatmap(matches) {
         );
         const nextColumn = Math.max(
           0,
-          Math.min(categories.length - 1, column + offset[1]),
+          Math.min(columnCategories.length - 1, column + offset[1]),
         );
         body.rows[nextRow].cells[nextColumn + 1]
           .querySelector("button")
@@ -133,10 +195,9 @@ function renderHeatmap(matches) {
       button.addEventListener("click", () => {
         selectedHeatmapCell = button;
         categoryOptions.querySelectorAll("input").forEach((input) => {
-          input.checked = pair.includes(input.value);
+          if (pair.includes(input.value)) input.checked = true;
         });
         status.value = "analysed";
-        includeExcluded.checked = false;
         resetPage();
         document.querySelector("#results-title").focus();
         results.scrollIntoView({ block: "start" });
@@ -148,9 +209,12 @@ function renderHeatmap(matches) {
   });
   table.append(body);
   heatmap.append(table);
+  selectedHeatmapCell = [...heatmap.querySelectorAll("button")]
+    .find(button => button.dataset.categories === selectedPair) || null;
 }
 
 function updateHeatmapHighlight() {
+  updateMatrixInfo(hoveredHeatmapCell || focusedHeatmapCell);
   if (selectedHeatmapCell?.getAttribute("aria-pressed") !== "true") {
     selectedHeatmapCell = heatmap.querySelector('button[aria-pressed="true"]');
   }
@@ -174,7 +238,44 @@ function updateHeatmapHighlight() {
   for (const cell of rows[row].cells) cell.classList.add("is-row-highlight");
   columnLabel.classList.add("is-column-highlight");
   for (const tr of rows) tr.cells[column + 1].classList.add("is-column-highlight");
-  detail.textContent = active.title;
+  detail.textContent = active.getAttribute("aria-label");
+}
+
+function updateMatrixInfo(button) {
+  matrixInfo.hidden = !button;
+  if (!button) return;
+  const tags = element("div", "tags");
+  for (const category of JSON.parse(button.dataset.categories)) {
+    tags.append(markCategory(element("span", "tag", category), category));
+  }
+  const count = Number(button.textContent);
+  matrixInfo.replaceChildren(
+    tags,
+    element("strong", "", `${count} matching analysed ${count === 1 ? "initiative" : "initiatives"}`),
+  );
+  const [example] = filterRecords(records, {
+    categories: JSON.parse(button.dataset.categories),
+    status: "analysed",
+  });
+  if (example) {
+    const preview = element("div", "matrix-example");
+    preview.append(
+      element("span", "matrix-example-label", "Top matching example"),
+      element("strong", "", resourceName(example)),
+      element("p", "matrix-example-summary",
+        summaryFor(example) || example.metadata?.Description || "No summary provided."),
+    );
+    matrixInfo.append(preview);
+  }
+  const anchor = button.getBoundingClientRect();
+  const box = matrixInfo.getBoundingClientRect();
+  const margin = 12;
+  const left = anchor.right + margin + box.width <= window.innerWidth
+    ? anchor.right + margin : anchor.left - margin - box.width;
+  const top = anchor.bottom + margin + box.height <= window.innerHeight
+    ? anchor.bottom + margin : anchor.top - margin - box.height;
+  matrixInfo.style.left = `${Math.max(margin, Math.min(left, window.innerWidth - box.width - margin))}px`;
+  matrixInfo.style.top = `${Math.max(margin, Math.min(top, window.innerHeight - box.height - margin))}px`;
 }
 
 function element(tag, className, text) {
@@ -293,9 +394,19 @@ function renderRecord(record, categories) {
     : items;
   const analysisSummary = categories.length ? null : summaryFor(record);
   const models = modelNames(record);
-  if (evidenceItems.length || analysisSummary || record.inclusion || models.length) {
+  const hasRow = record.row !== undefined && record.row !== null;
+  if (evidenceItems.length || analysisSummary || record.inclusion || models.length || hasRow) {
     const details = element("details", "analysis-details");
-    details.append(element("summary", "", "Details"));
+    const detailsLabel = element("summary");
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.classList.add("icon");
+    icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("focusable", "false");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    use.setAttribute("href", "./vendor/material-icons.svg#info");
+    icon.append(use);
+    detailsLabel.append(icon, " Details");
+    details.append(detailsLabel);
     if (models.length) {
       const modelTags = element("div", "tags model-tags");
       modelTags.setAttribute("role", "group");
@@ -305,6 +416,8 @@ function renderRecord(record, categories) {
       }
       details.append(modelTags);
     }
+    if (hasRow)
+      details.append(element("p", "source-row", `Original row: ${record.row}`));
     if (analysisSummary)
       details.append(element("p", "analysis-summary", analysisSummary));
     if (record.inclusion) {
@@ -343,16 +456,23 @@ function render() {
     query: search.value,
     categories,
     status: status.value,
-    includeExcluded: includeExcluded.checked,
   });
-  renderHeatmap(matches);
+  matrixReset.disabled = categories.length === 0;
+  chartReset.disabled = categories.length === 0;
+  barChart.querySelectorAll("button").forEach(button => {
+    button.setAttribute("aria-pressed", String(categories.includes(button.dataset.category)));
+  });
+  heatmap.querySelectorAll("th").forEach(label => {
+    const selected = categories.includes(label.dataset.category);
+    label.classList.toggle("is-selected", selected);
+    label.setAttribute("aria-label", `${label.title}${selected ? ", selected" : ""}`);
+  });
   heatmap.querySelectorAll("button").forEach((button) => {
     const pair = JSON.parse(button.dataset.categories);
     button.setAttribute(
       "aria-pressed",
       String(
-        pair.length === categories.length &&
-          pair.every((category) => categories.includes(category)),
+        pair.every((category) => categories.includes(category)),
       ),
     );
   });
@@ -390,7 +510,15 @@ function changePage(offset) {
 }
 
 async function load() {
+  chartReset.disabled = true;
+  chartGroups.disabled = true;
+  groupChartLabels.disabled = true;
+  barChart.replaceChildren();
+  document.querySelector("#chart-status").textContent = "Loading classification totals…";
+  matrixReset.disabled = true;
   groupMatrixLabels.disabled = true;
+  matrixColumns.disabled = true;
+  matrixRows.disabled = true;
   results.setAttribute("aria-busy", "true");
   loadError.hidden = true;
   empty.hidden = true;
@@ -416,6 +544,27 @@ async function load() {
         ),
       ),
     ].sort();
+    const columnOptions = [...categoryGroups];
+    if (categories.some(category => !categoryGroup(category))) {
+      columnOptions.push({ id: "ungrouped", name: "Ungrouped" });
+    }
+    for (const axis of [matrixRows, matrixColumns, chartGroups]) {
+      const previousOptions = new Map(
+        [...axis.querySelectorAll("input")].map(input => [input.value, input.checked]),
+      );
+      axis.querySelectorAll("label").forEach(label => label.remove());
+      for (const group of columnOptions) {
+        const option = element("label", "classification-option");
+        option.dataset.group = group.id;
+        const checkbox = element("input");
+        checkbox.type = "checkbox";
+        checkbox.value = group.id;
+        checkbox.checked = previousOptions.get(group.id)
+          ?? (axis !== matrixColumns || group.id !== "producer");
+        option.append(checkbox, element("span", "", group.name));
+        axis.append(option);
+      }
+    }
     categoryOptions.replaceChildren();
     for (const group of [...categoryGroups, { name: "Ungrouped", id: "ungrouped" }]) {
       const members = categories.filter(name => (categoryGroup(name)?.id || "ungrouped") === group.id);
@@ -441,8 +590,14 @@ async function load() {
     form.querySelectorAll("input, select, button").forEach((control) => {
       control.disabled = false;
     });
+    renderHeatmap();
+    renderBarChart();
     render();
     groupMatrixLabels.disabled = false;
+    matrixColumns.disabled = false;
+    matrixRows.disabled = false;
+    chartGroups.disabled = false;
+    groupChartLabels.disabled = false;
   } catch (error) {
     list.replaceChildren();
     pagination.hidden = true;
@@ -452,6 +607,9 @@ async function load() {
     document.querySelector("#dataset-summary").textContent =
       "Atlas unavailable.";
     count.textContent = "Data could not be loaded";
+    barChart.replaceChildren();
+    document.querySelector("#chart-status").textContent =
+      "Classification totals unavailable. Retry loading the atlas below.";
     document.querySelector("#heatmap-status").textContent =
       "Category overlaps unavailable. Retry loading the atlas below.";
     console.error("Atlas loading failed:", error);
@@ -467,8 +625,35 @@ for (const group of categoryGroups) {
 }
 
 groupMatrixLabels.addEventListener("change", () => {
+  renderHeatmap();
   render();
 });
+for (const control of [groupChartLabels, chartGroups]) {
+  control.addEventListener("change", () => {
+    renderBarChart();
+    render();
+  });
+}
+window.addEventListener("scroll", () => { matrixInfo.hidden = true; }, true);
+window.addEventListener("resize", () => { matrixInfo.hidden = true; });
+document.querySelector(".matrix-panel").addEventListener("toggle", () => {
+  matrixInfo.hidden = true;
+});
+for (const axis of [matrixRows, matrixColumns]) {
+  axis.addEventListener("change", () => {
+    renderHeatmap();
+    render();
+  });
+}
+function clearCategorySelections() {
+  categoryOptions.querySelectorAll("input").forEach(input => {
+    input.checked = false;
+  });
+  selectedHeatmapCell = null;
+  resetPage();
+}
+matrixReset.addEventListener("click", clearCategorySelections);
+chartReset.addEventListener("click", clearCategorySelections);
 form.addEventListener("input", resetPage);
 form.addEventListener("submit", (event) => event.preventDefault());
 form.addEventListener("reset", () => {

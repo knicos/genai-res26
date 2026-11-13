@@ -149,16 +149,19 @@ test("only HTTP and HTTPS links are allowed", () => {
 test("the provided dataset loads and all error records are filterable", async () => {
   const data = parseJSONL(await readFile(new URL("./results.jsonl", import.meta.url), "utf8"));
   assert.ok(data.length > 0);
-  const expectedErrors = data.filter(item => item.error
+  const visible = data.filter(item => item.inclusion?.include !== "no");
+  const excluded = data.filter(item => item.inclusion?.include === "no");
+  const expectedErrors = visible.filter(item => item.error
     || Object.values(item.roundStatus || {}).some(round => round.error || round.status !== "success")
     || (item.classifications.length > 0 && item.classifications.every(value => value.label === "unknown")));
-  assert.deepEqual(new Set(filterRecords(data, { status: "errors", includeExcluded: true })), new Set(expectedErrors));
+  assert.deepEqual(new Set(filterRecords(data, { status: "errors" })), new Set(expectedErrors));
   assert.ok(filterRecords(data).every(item => item.inclusion?.include !== "no"));
-  assert.equal(filterRecords(data, { includeExcluded: true }).length, data.length);
+  assert.deepEqual(new Set(filterRecords(data, { status: "excluded" })), new Set(excluded));
+  assert.equal(filterRecords(data).length + excluded.length, data.length);
   const pending = data.filter(item => !item.summary && !item.inclusion && !item.classifications.length
     && !Object.keys(item.roundStatus).length);
   assert.deepEqual(new Set(filterRecords(data, { status: "pending" })), new Set(pending));
-  assert.equal(filterRecords(data, { status: "analysed", includeExcluded: true }).length, data.length - expectedErrors.length - pending.length);
+  assert.equal(filterRecords(data, { status: "analysed" }).length, visible.length - expectedErrors.length - pending.length);
   const categories = new Set(data.flatMap(item => item.classifications.map(value => value.category)));
   assert.ok(categories.has("Government or Statutory Body"));
   assert.ok(categories.has("Ethics of AI and Rights"));
@@ -182,7 +185,7 @@ test("the provided dataset loads and all error records are filterable", async ()
   assert.deepEqual(means, [...means].sort((a, b) => a === null ? 1 : b === null ? -1 : b - a));
 });
 
-test("top-level summaries and inclusion decisions are searchable with an explicit opt-in for exclusions", () => {
+test("top-level summaries and inclusion decisions are searchable with an excluded-only status", () => {
   const included = { ...high, summary: "Unique overview", inclusion: { include: "yes", reason: "Endorsed nationally" } };
   const excluded = { ...low, inclusion: { include: "no", reason: "Outside scope" } };
   const data = parseJSONL([included, excluded].map(JSON.stringify).join("\n"));
@@ -190,12 +193,12 @@ test("top-level summaries and inclusion decisions are searchable with an explici
   assert.deepEqual(filterRecords(data, { query: "unique overview" }), [included]);
   assert.deepEqual(filterRecords(data, { query: "endorsed nationally" }), [included]);
   assert.deepEqual(filterRecords(data, { query: "outside scope" }), []);
-  assert.deepEqual(filterRecords(data, { query: "outside scope", includeExcluded: true }), [excluded]);
+  assert.deepEqual(filterRecords(data, { query: "outside scope", status: "excluded" }), [excluded]);
   assert.deepEqual(filterRecords(data), [included]);
-  assert.deepEqual(filterRecords(data, { includeExcluded: true }), [included, excluded]);
+  assert.deepEqual(filterRecords(data, { status: "excluded" }), [excluded]);
 });
 
-test("exclusion opt-in combines with categories and status without hiding undecided records", () => {
+test("excluded-only status combines with search and categories and includes failed exclusions", () => {
   const excluded = { ...high, inclusion: { include: "no" } };
   const undecided = { ...low, inclusion: { include: "unknown" } };
   const failedExcluded = { ...excluded, error: "Failed" };
@@ -203,9 +206,14 @@ test("exclusion opt-in combines with categories and status without hiding undeci
   assert.deepEqual(filterRecords(data), [undecided, negative]);
   const options = { categories: ["Educational Institution"], status: "analysed" };
   assert.deepEqual(filterRecords(data, options), [undecided]);
-  assert.deepEqual(filterRecords(data, { ...options, includeExcluded: true }), [excluded, undecided]);
+  assert.deepEqual(filterRecords(data, { ...options, status: "excluded" }), [excluded]);
+  assert.deepEqual(filterRecords(data, { status: "excluded", categories: ["Missing"] }), []);
+  assert.deepEqual(filterRecords(data, { status: "excluded", query: "nonexistent" }), []);
+  for (const status of ["all", "analysed", "errors", "pending"]) {
+    assert.ok(filterRecords([...data, failedExcluded], { status }).every(item => item.inclusion?.include !== "no"));
+  }
   assert.deepEqual(filterRecords([failedExcluded], { status: "errors" }), []);
-  assert.deepEqual(filterRecords([failedExcluded], { status: "errors", includeExcluded: true }), [failedExcluded]);
+  assert.deepEqual(filterRecords([failedExcluded], { status: "excluded", query: "failed" }), [failedExcluded]);
 });
 
 test("round errors include every failed round, even when its status is success", () => {
