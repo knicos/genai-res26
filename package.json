@@ -2,12 +2,7 @@
   "name": "ai-literacy-research-directory",
   "private": true,
   "scripts": {
-    "build:vendor": "node scripts/build-umap.mjs",
     "test": "node --test",
     "start": "python3 -m http.server 8000 --bind 127.0.0.1"
-  },
-  "devDependencies": {
-    "esbuild": "0.28.2",
-    "umap-js": "1.4.0"
   }
 }

@@ -1,7 +1,8 @@
-import { analysisError, classifications } from "./directory.mjs";
+import { analysisStatus, classifications, isExcluded } from "./directory.mjs";
+import { categoryGroup, categoryGroups } from "./category-groups.mjs";
 
-export function categoryOverlap(records) {
-  const analysed = records.filter(record => !analysisError(record));
+export function categoryOverlap(records, { groupByCategory = true } = {}) {
+  const analysed = records.filter(record => !isExcluded(record) && analysisStatus(record) === "analysed");
   const memberships = analysed.map(record => new Set(
     classifications(record).filter(item => item.label === "yes").map(item => item.category),
   ));
@@ -11,30 +12,15 @@ export function categoryOverlap(records) {
   const counts = categories.map(a => categories.map(b =>
     memberships.filter(items => items.has(a) && items.has(b)).length,
   ));
-  const similarity = (a, b) => {
-    const union = counts[a][a] + counts[b][b] - counts[a][b];
-    return union ? counts[a][b] / union : 0;
+  const groupIndex = category => {
+    const group = categoryGroup(category);
+    return group ? categoryGroups.indexOf(group) : categoryGroups.length;
   };
-  // Average-linkage grouping by Jaccard overlap keeps related categories adjacent.
-  const groups = categories.map((_, index) => [index]);
-  while (groups.length > 1) {
-    let best = -1;
-    let pair = [0, 1];
-    for (let a = 0; a < groups.length; a++) {
-      for (let b = a + 1; b < groups.length; b++) {
-        const score = groups[a].reduce((sum, i) =>
-          sum + groups[b].reduce((subtotal, j) => subtotal + similarity(i, j), 0), 0)
-          / (groups[a].length * groups[b].length);
-        if (score > best) {
-          best = score;
-          pair = [a, b];
-        }
-      }
-    }
-    groups[pair[0]].push(...groups[pair[1]]);
-    groups.splice(pair[1], 1);
-  }
-  const order = groups[0] || [];
+  const order = categories.map((_, index) => index).sort((a, b) =>
+    (groupByCategory ? groupIndex(categories[a]) - groupIndex(categories[b]) : 0)
+    || counts[b][b] - counts[a][a]
+    || categories[a].localeCompare(categories[b]),
+  );
   return {
     categories: order.map(index => categories[index]),
     counts: order.map(a => order.map(b => counts[a][b])),

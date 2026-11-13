@@ -29,15 +29,15 @@
           connections across the AI literacy landscape.
         </p>
         <p id="dataset-summary" class="dataset-summary">Loading atlas…</p>
+        <div id="group-legend" class="group-legend" role="group" aria-label="Classification groups"></div>
       </section>
-      <details class="cluster-panel" open>
-        <summary>Explore the atlas</summary>
-        <div class="visualisation-tabs" role="tablist" aria-label="Atlas visualisations">
-          <button type="button" id="matrix-tab" role="tab" aria-selected="true" aria-controls="matrix-panel">Category matrix</button>
-          <button type="button" id="map-tab" role="tab" aria-selected="false" aria-controls="map-panel" tabindex="-1">Initiative map</button>
-        </div>
-        <div id="matrix-panel" role="tabpanel" aria-labelledby="matrix-tab">
+      <details class="matrix-panel" open>
+        <summary>Category matrix</summary>
         <p id="heatmap-status" class="help">Loading category overlaps…</p>
+        <label class="classification-option">
+          <input id="group-matrix-labels" type="checkbox" checked disabled />
+          <span>Group labels by category</span>
+        </label>
         <div
           id="heatmap"
           class="heatmap-scroll"
@@ -53,34 +53,6 @@
         <p id="heatmap-detail" class="help" role="status" aria-live="polite">
           Hover over or focus a cell to see its categories and count.
         </p>
-        </div>
-        <div id="map-panel" role="tabpanel" aria-labelledby="map-tab" hidden>
-          <label for="map-mode">Similarity comparison</label>
-          <select id="map-mode" disabled>
-            <option value="binary">Binary categories (ignore confidence)</option>
-            <option value="confidence">Labels + confidence</option>
-          </select>
-          <label for="map-cluster-count">Number of clusters</label>
-          <select id="map-cluster-count" disabled>
-            <option value="auto">Auto</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-          </select>
-          <p id="map-status" class="help">Loading initiative profiles…</p>
-          <div id="map-controls" class="map-controls" role="group" aria-label="Map navigation" hidden>
-            <button type="button" data-action="out" aria-label="Zoom out">−</button>
-            <output aria-label="Zoom level" aria-live="polite">100%</output>
-            <button type="button" data-action="in" aria-label="Zoom in">+</button>
-            <button type="button" data-action="reset">Reset view</button>
-          </div>
-          <div id="initiative-map" class="initiative-map"></div>
-          <ul id="map-clusters" class="map-clusters" aria-label="Initiative clusters"></ul>
-          <div id="map-selection" class="map-selection" aria-live="polite"></div>
-        </div>
       </details>
       <div class="directory">
         <aside aria-labelledby="filters-title">
@@ -101,6 +73,7 @@
               aria-describedby="category-help"
             >
               <legend>Categories</legend>
+              <p id="category-help" class="help">Grouped by Producer, Audience, Type, and Topic. All selected categories must match.</p>
               <div id="categories" class="classification-options"></div>
             </fieldset>
             <label for="status">Analysis status</label>
@@ -108,7 +81,12 @@
               <option value="all">All records</option>
               <option value="analysed">Analysed only</option>
               <option value="errors">Errors only</option>
+              <option value="pending">Not yet analysed</option>
             </select>
+            <label class="classification-option">
+              <input id="include-excluded" type="checkbox" />
+              <span>Include excluded initiatives</span>
+            </label>
           </form>
         </aside>
         <section
@@ -130,6 +108,7 @@
             <p>
               Try a broader search or reset your filters. Error records may not
               match any category; clear all category selections to see them.
+              To search excluded initiatives, select "Include excluded initiatives".
             </p>
             <button type="button" id="empty-reset">Reset filters</button>
           </div>
