@@ -8,6 +8,9 @@
       content="Explore the Atlas of AI Literacy Initiatives. Search initiatives by category and discover connections across the AI literacy landscape."
     />
     <title>Atlas of AI Literacy Initiatives</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Andika:ital,wght@0,400;0,700;1,400;1,700&amp;display=swap" />
     <link rel="stylesheet" href="./styles.css" />
     <script type="module" src="./app.mjs"></script>
   </head>
@@ -17,9 +20,6 @@
         <a class="brand" href="./"
           >AI Literacy <span>Initiatives Atlas</span></a
         >
-        <a class="data-link" href="./results.jsonl" download>
-          <svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#download"></use></svg>
-          Download JSONL</a>
       </div>
     </header>
     <main class="page-width">
@@ -33,8 +33,13 @@
         <p id="dataset-summary" class="dataset-summary">Loading atlas…</p>
         <div id="group-legend" class="group-legend" role="group" aria-label="Classification groups"></div>
       </section>
-      <details class="chart-panel">
-        <summary>Classification totals</summary>
+      <details class="explore-panel">
+        <summary>Explore</summary>
+        <div class="explore-tabs record-tabs" role="tablist" aria-label="Explore classifications">
+          <button type="button" class="record-tab" role="tab" id="explore-totals-tab" aria-controls="explore-totals" aria-selected="true" tabindex="0"><svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#bar-chart"></use></svg> Classification totals</button>
+          <button type="button" class="record-tab" role="tab" id="explore-matrix-tab" aria-controls="explore-matrix" aria-selected="false" tabindex="-1"><svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#matrix"></use></svg> Classification matrix</button>
+        </div>
+        <div id="explore-totals" class="explore-view" role="tabpanel" aria-labelledby="explore-totals-tab" tabindex="0">
         <p id="chart-status" class="help">Loading classification totals…</p>
         <div class="matrix-controls">
           <label class="classification-option">
@@ -42,16 +47,17 @@
             <span>Group labels by category</span>
           </label>
           <button id="chart-reset" type="button" class="text-button" disabled
-            aria-label="Reset chart category selections">Reset</button>
+            aria-label="Reset chart category selections">
+            <svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#refresh"></use></svg>
+            Reset</button>
         </div>
         <fieldset id="chart-groups" class="matrix-axis-options" disabled>
           <legend>Label categories</legend>
         </fieldset>
         <p class="help">Positive classifications per label. Select a bar to add its category to the search filters.</p>
         <div id="bar-chart" role="group" aria-label="Initiatives classified yes per label"></div>
-      </details>
-      <details class="matrix-panel">
-        <summary><svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#matrix"></use></svg>Classification matrix</summary>
+        </div>
+        <div id="explore-matrix" class="explore-view" role="tabpanel" aria-labelledby="explore-matrix-tab" tabindex="0" hidden>
         <p id="heatmap-status" class="help">Loading category overlaps…</p>
         <div class="matrix-controls">
           <label class="classification-option">
@@ -86,8 +92,10 @@
         <p id="heatmap-detail" class="help" role="status" aria-live="polite">
           Hover over or focus a cell to see its categories and count.
         </p>
+        </div>
       </details>
       <div id="matrix-info" class="matrix-info" aria-hidden="true" hidden></div>
+      <div id="tag-info" class="matrix-info tag-info" aria-hidden="true" hidden></div>
       <div class="directory">
         <aside aria-labelledby="filters-title">
           <form id="filters">
@@ -130,6 +138,10 @@
           <div class="results-heading">
             <h2 id="results-title" tabindex="-1">Initiatives</h2>
             <p id="result-count" role="status" aria-live="polite">Loading…</p>
+            <button type="button" id="export-open" class="export-open" disabled>
+              <svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#download"></use></svg>
+              Export CSV
+            </button>
           </div>
           <div id="load-error" class="notice error-notice" role="alert" hidden>
             <h3>Unable to load the atlas</h3>
@@ -168,6 +180,23 @@
           </nav>
         </section>
       </div>
+      <dialog id="export-dialog" aria-labelledby="export-title" aria-describedby="export-description">
+        <form id="export-form">
+          <h2 id="export-title">Export filtered results</h2>
+          <p id="export-description" class="help">Choose columns for all matching results, including those on other pages. Formula-like text is prefixed with an apostrophe for spreadsheet safety.</p>
+          <p id="export-count" class="help"></p>
+          <div class="export-selection-actions">
+            <button type="button" id="export-select-all" class="text-button">Select all</button>
+            <button type="button" id="export-select-none" class="text-button">Clear all</button>
+          </div>
+          <div id="export-columns" class="export-columns"></div>
+          <p id="export-error" class="error-text" role="alert" hidden></p>
+          <div class="export-actions">
+            <button type="button" id="export-cancel">Cancel</button>
+            <button type="submit" class="export-submit"><svg class="icon" aria-hidden="true" focusable="false"><use href="./vendor/material-icons.svg#download"></use></svg> Download CSV</button>
+          </div>
+        </form>
+      </dialog>
       <noscript
         ><p class="notice">
           JavaScript is required to search this atlas. You can also

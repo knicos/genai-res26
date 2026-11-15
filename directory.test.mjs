@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { analysisError, analysisStatus, classifications, filterRecords, modelNames, parseJSONL, safeURL, scoreFor, summaryFor } from "./directory.mjs";
+import { additionalSummaryFields, analysisError, analysisStatus, classifications, filterRecords, modelNames, parseJSONL, safeURL, scoreFor, summaryFor } from "./directory.mjs";
 
 const record = (name, label, score) => ({
   url: `https://example.org/${name}`,
+  score: typeof score === "number" ? score * 10 : 0,
   metadata: { "Initiative / Programme": name, Description: "Research learning resource", "Country / Origin": "EU" },
   classifications: [{ category: "Educational Institution", label, score, reason: "Supports educators" }],
   roundStatus: { "2": { status: "success" } },
@@ -46,12 +47,19 @@ test("reports invalid JSON and malformed records with line numbers", () => {
   assert.throws(() => parseJSONL("\n"), /no records/);
 });
 
-test("defaults to positive classification confidence, with unscored last", () => {
-  assert.deepEqual(filterRecords(records), [high, low, unknown, error, negative]);
-  assert.equal(scoreFor(negative), null);
-  assert.equal(scoreFor(error), null);
-  assert.equal(scoreFor(negative, ["Educational Institution"]), null);
-  assert.equal(scoreFor(record("Invalid", "yes", 5)), null);
+test("sorts by row score regardless of analysis status or classification confidence", () => {
+  assert.deepEqual(filterRecords(records), [negative, high, low, unknown, error]);
+  assert.equal(scoreFor(negative), 10);
+  assert.equal(scoreFor(error), 0);
+  assert.equal(scoreFor({ ...error, score: 8 }), 8);
+  assert.equal(scoreFor({ ...high, score: undefined }), 0);
+  assert.equal(scoreFor({ ...high, score: 0 }), 0);
+  assert.equal(scoreFor({ ...high, score: 10 }), 10);
+  for (const score of [null, NaN, Infinity, -1, 10.1, "7"]) {
+    assert.throws(() => scoreFor({ ...high, score }), /Invalid score/);
+    assert.throws(() => parseJSONL(JSON.stringify({ ...high, score })), /Invalid score on line 1/);
+  }
+  assert.throws(() => parseJSONL(`${JSON.stringify(high)}\n${JSON.stringify({ ...low, score: 11 })}`), /Invalid score on line 2/);
 });
 
 test("category filters only match yes classifications", () => {
@@ -67,7 +75,77 @@ test("combines multi-term case-insensitive search with classification and status
   assert.deepEqual(filterRecords(records, { categories: ["Educational Institution"], status: "errors" }), []);
 });
 
-test("requires every selected classification and sorts by arithmetic mean", () => {
+test("ranks name phrases and name terms above incidental matches, then row score", () => {
+  const phrase = record("AI Literacy Framework", "yes", .2);
+  const phraseHigher = record("The AI Literacy Framework", "yes", .4);
+  const reordered = record("Literacy for AI", "yes", .99);
+  const partial = record("AI resource", "yes", .99);
+  partial.metadata.Description = "Literacy for educators";
+  const incidental = record("Learning resource", "yes", 1);
+  incidental.summary = "AI literacy is mentioned in this overview";
+  const data = [incidental, partial, reordered, phrase, phraseHigher];
+  assert.deepEqual(filterRecords(data, { query: "AI literacy" }),
+    [phraseHigher, phrase, reordered, partial, incidental]);
+  assert.deepEqual(filterRecords(data, { query: "  AI   LITERACY  " }),
+    [phraseHigher, phrase, reordered, partial, incidental]);
+  assert.deepEqual(filterRecords(data), [incidental, partial, reordered, phraseHigher, phrase]);
+});
+
+test("matches short terms as whole words and longer terms at word starts", () => {
+  const exact = record("AI learning", "yes", .4);
+  const accidental = record("Training resource", "yes", .9);
+  const prefix = record("Artificial intelligence training", "yes", .8);
+  const unicode = record("Éducation à l'IA", "yes", .7);
+  const data = [exact, accidental, prefix, unicode];
+  assert.deepEqual(filterRecords(data, { query: "AI" }), [exact]);
+  assert.deepEqual(filterRecords(data, { query: "train" }), [accidental, prefix]);
+  assert.deepEqual(filterRecords(data, { query: "éduc ia" }), [unicode]);
+  assert.deepEqual(filterRecords(data, { query: "aining" }), []);
+  assert.deepEqual(filterRecords(data, { query: "example.org/Training" }), [accidental]);
+  assert.deepEqual(filterRecords(data, { query: "[" }), []);
+});
+
+test("searches positive classification evidence but not negative or unknown classifications", () => {
+  const positive = record("First", "yes", .8);
+  positive.classifications[0] = { category: "AI literacy", label: "yes", score: .8, reason: "Specific instruction" };
+  const negative = record("Second", "no", .9);
+  negative.classifications[0] = { category: "AI literacy", label: "no", score: .9, reason: "Specific instruction" };
+  const uncertain = record("Third", "unknown", .5);
+  uncertain.classifications[0] = { category: "AI literacy", label: "unknown", score: .5, reason: "Specific instruction" };
+  const data = [positive, negative, uncertain];
+  assert.deepEqual(filterRecords(data, { query: "AI literacy" }), [positive]);
+  assert.deepEqual(filterRecords(data, { query: "specific instruction" }), [positive]);
+});
+
+test("search relevance respects filters, row scores and status", () => {
+  const lower = record("AI literacy course", "yes", .3);
+  const higher = record("AI literacy guide", "yes", .9);
+  const unscored = record("AI literacy guidebook", "yes", null);
+  const excluded = { ...higher, inclusion: { include: "no" } };
+  const failed = { ...record("AI literacy failure", "yes", .9), error: "Failure" };
+  const data = [lower, higher, excluded, unscored, failed];
+  assert.deepEqual(filterRecords(data, { query: "AI literacy", status: "analysed" }), [higher, lower, unscored]);
+  assert.deepEqual(filterRecords(data, { query: "AI literacy", status: "excluded" }), [excluded]);
+  assert.deepEqual(filterRecords(data, { query: "AI literacy", categories: ["Educational Institution"] }),
+    [failed, higher, lower, unscored]);
+  assert.deepEqual(filterRecords(data, { query: "AI literacy", categories: ["Missing"] }), []);
+});
+
+test("additional summaries retain their tab order and are searchable", () => {
+  assert.deepEqual(additionalSummaryFields.map(({ field, label }) => [field, label]), [
+    ["pedagogicalSummary", "Pedagogy"],
+    ["prioritySummary", "Priority"],
+    ["educationalTechnologySummary", "Tools"],
+  ]);
+  const detailed = { ...high, pedagogicalSummary: "Situated learning",
+    prioritySummary: "Learner agency", educationalTechnologySummary: "Interactive simulation" };
+  for (const query of ["situated", "AGENCY", "simulation", "situated agency simulation"]) {
+    assert.deepEqual(filterRecords([detailed, low], { query }), [detailed]);
+  }
+  assert.deepEqual(filterRecords([high], { query: "simulation" }), []);
+});
+
+test("requires every selected classification and sorts by row score", () => {
   const first = record("First", "yes", 1);
   first.classifications.push({ category: "Teachers", label: "yes", score: .4 });
   const second = record("Second", "yes", .8);
@@ -76,13 +154,12 @@ test("requires every selected classification and sorts by arithmetic mean", () =
   third.classifications.push({ category: "Teachers", label: "no", score: .9 });
   const data = [first, high, third, second, error];
   const categories = ["Educational Institution", "Teachers"];
-  assert.equal(scoreFor(first, categories), .7);
-  assert.equal(scoreFor(second, categories), .8);
-  assert.deepEqual(filterRecords(data, { categories }), [second, first]);
+  assert.equal(scoreFor(first), 10);
+  assert.equal(scoreFor(second), 8);
+  assert.deepEqual(filterRecords(data, { categories }), [first, second]);
   assert.deepEqual(filterRecords(data, { categories, query: "Second", status: "analysed" }), [second]);
   assert.deepEqual(filterRecords(data, { categories, status: "errors" }), []);
-  assert.equal(scoreFor(first, ["Educational Institution"]), 1);
-  assert.equal(scoreFor(first, ["Teachers", "Educational Institution", "Teachers"]), .7);
+  assert.equal(scoreFor(first), 10);
 });
 
 test("all-unknown analyses are errors, but empty and mixed classifications are not", () => {
@@ -96,8 +173,7 @@ test("all-unknown analyses are errors, but empty and mixed classifications are n
   assert.match(analysisError(allUnknown).message, /all categories.*unknown/);
   assert.equal(analysisError(unknown).type, "analysis_failed");
   for (const item of [mixed, empty, high, negative]) assert.equal(analysisError(item), null);
-  assert.equal(scoreFor(allUnknown), null);
-  assert.equal(scoreFor(allUnknown, ["Educational Institution", "Teachers"]), null);
+  assert.equal(scoreFor(allUnknown), 10);
   assert.deepEqual(filterRecords(data, { status: "errors" }), [allUnknown, error]);
   assert.deepEqual(new Set(filterRecords(data, { status: "analysed" })), new Set([mixed, empty, high]));
   assert.deepEqual(filterRecords(data, { status: "errors", query: "analysis_failed unknown" }), [allUnknown]);
@@ -111,23 +187,19 @@ test("explicit errors take precedence over inferred failures and remain searchab
   const textError = { ...high, error: "Model failed to respond" };
   assert.equal(analysisError(textError).message, textError.error);
   assert.deepEqual(filterRecords([textError], { status: "errors", query: "failed respond" }), [textError]);
-  assert.equal(scoreFor(textError), null);
+  assert.equal(scoreFor(textError), 9.5);
 });
 
-test("missing or invalid selected scores are unscored and sort last", () => {
+test("row score is independent of selected classification scores", () => {
   const valid = record("Valid", "yes", .8);
   valid.classifications.push({ category: "Teachers", label: "yes", score: .6 });
   const categories = ["Educational Institution", "Teachers"];
-  assert.equal(scoreFor(high, categories), null);
   for (const score of [undefined, null, NaN, Infinity, -1, 2, "0.9"]) {
-    const invalid = record("Invalid", "yes", .9);
-    invalid.classifications.push({ category: "Teachers", label: "yes", score });
-    assert.equal(scoreFor(invalid, categories), null);
-    assert.deepEqual(filterRecords([invalid, valid], { categories }), [valid, invalid]);
+    const item = record("Other", "yes", .9);
+    item.classifications.push({ category: "Teachers", label: "yes", score });
+    assert.equal(scoreFor(item), 9);
+    assert.deepEqual(filterRecords([item, valid], { categories }), [item, valid]);
   }
-  const zero = record("Zero", "yes", 0);
-  zero.classifications.push({ category: "Teachers", label: "yes", score: 0 });
-  assert.equal(scoreFor(zero, categories), 0);
 });
 
 test("sorts highest first with name tiebreakers without mutating the source array", () => {
@@ -168,8 +240,8 @@ test("the provided dataset loads and all error records are filterable", async ()
   for (const category of categories) {
     const matches = filterRecords(data, { categories: [category] });
     assert.ok(matches.every(item => item.classifications.some(value => value.category === category && value.label === "yes")));
-    const scores = matches.map(item => scoreFor(item, [category]));
-    assert.deepEqual(scores, [...scores].sort((a, b) => a === null ? 1 : b === null ? -1 : b - a));
+    const scores = matches.map(item => scoreFor(item));
+    assert.deepEqual(scores, [...scores].sort((a, b) => b - a));
   }
   const selected = ["Government or Statutory Body", "Adult Education"];
   const expected = data.filter(item => item.inclusion?.include !== "no" && selected.every(category =>
@@ -177,12 +249,8 @@ test("the provided dataset loads and all error records are filterable", async ()
   const matches = filterRecords(data, { categories: selected });
   assert.ok(matches.length > 0);
   assert.equal(matches.length, expected.length);
-  for (const item of matches) {
-    const scores = selected.map(category => item.classifications.find(value => value.category === category && value.label === "yes").score);
-    assert.equal(scoreFor(item, selected), analysisError(item) ? null : scores.reduce((sum, score) => sum + score, 0) / selected.length);
-  }
-  const means = matches.map(item => scoreFor(item, selected));
-  assert.deepEqual(means, [...means].sort((a, b) => a === null ? 1 : b === null ? -1 : b - a));
+  const scores = matches.map(item => scoreFor(item));
+  assert.deepEqual(scores, [...scores].sort((a, b) => b - a));
 });
 
 test("top-level summaries and inclusion decisions are searchable with an excluded-only status", () => {
@@ -203,7 +271,7 @@ test("excluded-only status combines with search and categories and includes fail
   const undecided = { ...low, inclusion: { include: "unknown" } };
   const failedExcluded = { ...excluded, error: "Failed" };
   const data = [excluded, undecided, negative];
-  assert.deepEqual(filterRecords(data), [undecided, negative]);
+  assert.deepEqual(filterRecords(data), [negative, undecided]);
   const options = { categories: ["Educational Institution"], status: "analysed" };
   assert.deepEqual(filterRecords(data, options), [undecided]);
   assert.deepEqual(filterRecords(data, { ...options, status: "excluded" }), [excluded]);
@@ -229,7 +297,7 @@ test("round errors include every failed round, even when its status is success",
   assert.match(error.message, /Round 4.*model_response_error.*Invalid response/);
   assert.match(error.message, /Round 5.*Try again/);
   assert.equal(analysisStatus(partial), "errors");
-  assert.equal(scoreFor(partial), null);
+  assert.equal(scoreFor(partial), 9.5);
   assert.equal(classifications(partial).length, 1);
   assert.deepEqual(filterRecords([partial], { status: "errors", query: "model_response_error invalid" }), [partial]);
   assert.deepEqual(filterRecords([partial], { categories: ["Educational Institution"] }), [partial]);
@@ -245,7 +313,7 @@ test("unprocessed records are pending, not errors or analysed; partial successes
   const data = parseJSONL([pending, summaryOnly, high, failed].map(JSON.stringify).join("\n"));
   assert.equal(analysisError(pending), null);
   assert.equal(analysisStatus(pending), "pending");
-  assert.equal(scoreFor(pending), null);
+  assert.equal(scoreFor(pending), 0);
   assert.equal(analysisStatus(high), "analysed");
   assert.deepEqual(filterRecords(data, { status: "pending" }), [pending]);
   assert.deepEqual(filterRecords(data, { status: "analysed" }), [high, summaryOnly]);
@@ -257,7 +325,7 @@ test("legacy nested analysis remains supported and top-level fields take precede
   assert.deepEqual(parseJSONL(JSON.stringify(legacy)), [legacy]);
   assert.equal(summaryFor(legacy), "Legacy summary");
   assert.deepEqual(classifications(legacy), high.classifications);
-  assert.equal(scoreFor(legacy), .95);
+  assert.equal(scoreFor(legacy), 0);
   const current = { ...legacy, classifications: [], summary: "Current summary" };
   assert.deepEqual(classifications(current), []);
   assert.equal(summaryFor(current), "Current summary");

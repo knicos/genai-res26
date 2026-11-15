@@ -1,4 +1,5 @@
 import {
+  additionalSummaryFields,
   analysisError,
   analysisStatus,
   classifications,
@@ -12,6 +13,8 @@ import {
 } from "./directory.mjs";
 import { categoryOverlap } from "./heatmap.mjs";
 import { categoryGroup, categoryGroups } from "./category-groups.mjs";
+import { countryFlag } from "./country-flags.mjs";
+import { exportColumns, recordsToCSV } from "./csv-export.mjs";
 
 const form = document.querySelector("#filters");
 const search = document.querySelector("#search");
@@ -32,16 +35,34 @@ const matrixReset = document.querySelector("#matrix-reset");
 const matrixColumns = document.querySelector("#matrix-columns");
 const matrixRows = document.querySelector("#matrix-rows");
 const matrixInfo = document.querySelector("#matrix-info");
+const tagInfo = document.querySelector("#tag-info");
 const barChart = document.querySelector("#bar-chart");
 const chartGroups = document.querySelector("#chart-groups");
 const groupChartLabels = document.querySelector("#group-chart-labels");
 const chartReset = document.querySelector("#chart-reset");
+const explorePanel = document.querySelector(".explore-panel");
+const exploreTabs = [...document.querySelectorAll(".explore-tabs [role=tab]")];
+const exportOpen = document.querySelector("#export-open");
+const exportDialog = document.querySelector("#export-dialog");
+const exportForm = document.querySelector("#export-form");
+const exportOptions = document.querySelector("#export-columns");
+const exportError = document.querySelector("#export-error");
 const pageSize = 25;
 let records = [];
+let currentMatches = [];
+let availableExportColumns = [];
 let currentPage = 1;
 let hoveredHeatmapCell = null;
 let focusedHeatmapCell = null;
 let selectedHeatmapCell = null;
+let recordTabId = 0;
+let tagReasonId = 0;
+let hoveredResultTag = null;
+let focusedResultTag = null;
+let pinnedResultTag = null;
+let activeResultTag = null;
+let overTagInfo = false;
+let tagInfoTimer;
 
 function renderBarChart() {
   const { categories, counts, analysedCount } = categoryOverlap(records, {
@@ -66,7 +87,9 @@ function renderBarChart() {
     const fill = element("span", "chart-fill");
     fill.style.width = `${maximum ? count / maximum * 100 : 0}%`;
     track.append(fill);
-    button.append(element("span", "chart-label", category), track, element("span", "chart-value", count));
+    const label = element("span", "chart-label", category);
+    label.prepend(materialIcon("check", "selection-icon"));
+    button.append(label, track, element("span", "chart-value", count));
     button.addEventListener("click", () => {
       categoryOptions.querySelectorAll("input").forEach(input => {
         if (input.value === category) input.checked = true;
@@ -118,7 +141,9 @@ function renderHeatmap() {
     cell.scope = "col";
     markCategory(cell, category);
     cell.dataset.category = category;
-    cell.append(element("span", "", category));
+    const label = element("span", "", category);
+    label.prepend(materialIcon("check", "selection-icon"));
+    cell.append(label);
     header.append(cell);
   }
   head.append(header);
@@ -127,7 +152,9 @@ function renderHeatmap() {
   categories.forEach((a, row) => {
     const tr = element("tr");
     const heading = element("th");
-    heading.append(element("span", "", a));
+    const label = element("span", "", a);
+    label.prepend(materialIcon("check", "selection-icon"));
+    heading.append(label);
     heading.scope = "row";
     markCategory(heading, a);
     heading.dataset.category = a;
@@ -267,15 +294,89 @@ function updateMatrixInfo(button) {
     );
     matrixInfo.append(preview);
   }
+  positionInfoBox(matrixInfo, button);
+}
+
+function positionInfoBox(info, button) {
   const anchor = button.getBoundingClientRect();
-  const box = matrixInfo.getBoundingClientRect();
+  const box = info.getBoundingClientRect();
   const margin = 12;
   const left = anchor.right + margin + box.width <= window.innerWidth
     ? anchor.right + margin : anchor.left - margin - box.width;
   const top = anchor.bottom + margin + box.height <= window.innerHeight
     ? anchor.bottom + margin : anchor.top - margin - box.height;
-  matrixInfo.style.left = `${Math.max(margin, Math.min(left, window.innerWidth - box.width - margin))}px`;
-  matrixInfo.style.top = `${Math.max(margin, Math.min(top, window.innerHeight - box.height - margin))}px`;
+  info.style.left = `${Math.max(margin, Math.min(left, window.innerWidth - box.width - margin))}px`;
+  info.style.top = `${Math.max(margin, Math.min(top, window.innerHeight - box.height - margin))}px`;
+}
+
+function hideTagInfo() {
+  clearTimeout(tagInfoTimer);
+  hoveredResultTag = null;
+  focusedResultTag = null;
+  pinnedResultTag = null;
+  activeResultTag = null;
+  overTagInfo = false;
+  tagInfo.hidden = true;
+}
+
+function updateTagInfo() {
+  clearTimeout(tagInfoTimer);
+  const tag = pinnedResultTag || hoveredResultTag || focusedResultTag;
+  if (!tag) {
+    tagInfo.hidden = true;
+    activeResultTag = null;
+    return;
+  }
+  activeResultTag = tag;
+  const label = markCategory(element("span", "tag", tag.dataset.category), tag.dataset.category);
+  const labels = element("div", "tags");
+  labels.append(label);
+  tagInfo.replaceChildren(labels, element("p", "tag-info-reason", tag.querySelector(".tag-reason").textContent));
+  tagInfo.hidden = false;
+  positionInfoBox(tagInfo, tag);
+}
+
+function deferTagInfoUpdate() {
+  clearTimeout(tagInfoTimer);
+  tagInfoTimer = setTimeout(() => {
+    if (!overTagInfo) updateTagInfo();
+  }, 180);
+}
+
+function resultClassificationTag(item) {
+  const tag = markCategory(element("button", "tag result-tag", item.category), item.category);
+  tag.type = "button";
+  tag.removeAttribute("title");
+  tag.dataset.category = item.category;
+  const reason = element("span", "tag-reason visually-hidden", item.reason || "No reason provided.");
+  reason.id = `tag-reason-${tagReasonId++}`;
+  tag.setAttribute("aria-describedby", reason.id);
+  tag.append(reason);
+  tag.addEventListener("mouseenter", () => {
+    hoveredResultTag = tag;
+    updateTagInfo();
+  });
+  tag.addEventListener("mouseleave", () => {
+    if (hoveredResultTag === tag) hoveredResultTag = null;
+    deferTagInfoUpdate();
+  });
+  tag.addEventListener("focus", () => {
+    focusedResultTag = tag;
+    updateTagInfo();
+  });
+  tag.addEventListener("blur", () => {
+    if (focusedResultTag === tag) focusedResultTag = null;
+    deferTagInfoUpdate();
+  });
+  tag.addEventListener("click", () => {
+    if (pinnedResultTag === tag) {
+      hideTagInfo();
+    } else {
+      pinnedResultTag = tag;
+      updateTagInfo();
+    }
+  });
+  return tag;
 }
 
 function element(tag, className, text) {
@@ -283,6 +384,17 @@ function element(tag, className, text) {
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+function materialIcon(name, className = "") {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", `icon ${className}`.trim());
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `./vendor/material-icons.svg#${name}`);
+  svg.append(use);
+  return svg;
 }
 
 function markCategory(node, category) {
@@ -307,6 +419,59 @@ function selectedCategories() {
   );
 }
 
+function setupTabs(tabs, panels, onActivate = () => {}) {
+  const activate = index => {
+    onActivate(index);
+    tabs.forEach((tab, i) => {
+      tab.setAttribute("aria-selected", String(i === index));
+      tab.tabIndex = i === index ? 0 : -1;
+      panels[i].hidden = i !== index;
+    });
+  };
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => activate(index));
+    tab.addEventListener("keydown", event => {
+      let next;
+      if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+      else if (event.key === "ArrowLeft") next = (index + tabs.length - 1) % tabs.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = tabs.length - 1;
+      else return;
+      event.preventDefault();
+      activate(next);
+      tabs[next].focus();
+    });
+  });
+  activate(0);
+}
+
+function appendRecordTabs(card, views, name) {
+  const id = `record-tabs-${recordTabId++}`;
+  const tablist = element("div", "record-tabs");
+  tablist.setAttribute("role", "tablist");
+  tablist.setAttribute("aria-label", `${name} information`);
+  const tabs = views.map(({ label, panel, icon }, index) => {
+    const tab = element("button", "record-tab", label);
+    if (icon) tab.prepend(materialIcon(icon));
+    tab.type = "button";
+    tab.id = `${id}-tab-${index}`;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-controls", `${id}-panel-${index}`);
+    panel.id = `${id}-panel-${index}`;
+    panel.classList.add("record-panel");
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", tab.id);
+    panel.tabIndex = 0;
+    tablist.append(tab);
+    return tab;
+  });
+  setupTabs(tabs, views.map(view => view.panel), index => {
+    if (activeResultTag && card.contains(activeResultTag)
+      && !views[index].panel.contains(activeResultTag)) hideTagInfo();
+  });
+  card.append(tablist, ...views.map(view => view.panel));
+}
+
 function renderRecord(record, categories) {
   const card = element("article", "result-card");
   const heading = element("div", "card-heading");
@@ -324,40 +489,37 @@ function renderRecord(record, categories) {
   heading.append(title);
   const error = analysisError(record);
   const pending = analysisStatus(record) === "pending";
-  const score = scoreFor(record, categories);
-  heading.append(
-    element(
-      "span",
-      error ? "badge error-badge" : "badge score-badge",
-      error
-        ? "Analysis error"
-        : pending
-          ? "Not yet analysed"
-          : score === null
-          ? "Unscored"
-          : `${percent(score)} confidence`,
-    ),
-  );
+  const badges = element("div", "card-badges");
+  if (error || pending) {
+    badges.append(element("span", error ? "badge error-badge" : "badge score-badge",
+      error ? "Analysis error" : "Not yet analysed"));
+  }
+  badges.append(element("span", "badge score-badge", `Score: ${scoreFor(record).toFixed(1)} / 10`));
+  heading.append(badges);
   card.append(heading);
   const meta = element("div", "resource-meta");
-  meta.append(
-    element(
-      "span",
-      "",
-      record.metadata?.["Country / Origin"] || "Origin not specified",
-    ),
-  );
-  meta.append(element("span", "resource-url", record.url));
+  const origin = record.metadata?.["Country / Origin"] || "Origin not specified";
+  const country = element("span", "country-badge");
+  const flag = countryFlag(origin);
+  if (flag) {
+    const icon = element("span", "country-flag", flag);
+    icon.setAttribute("aria-hidden", "true");
+    country.append(icon);
+  }
+  country.append(element("span", "", origin));
+  meta.append(country);
+  //meta.append(element("span", "resource-url", record.url));
   card.append(meta);
+  const summary = element("div", "record-summary");
   if (!url)
-    card.append(
+    summary.append(
       element(
         "p",
         "error-text",
         "Invalid or unsupported website URL; link disabled.",
       ),
     );
-  card.append(
+  summary.append(
     element(
       "p",
       "description",
@@ -380,33 +542,23 @@ function renderRecord(record, categories) {
     errorBox.append(
       element("p", "", message || "No further error details were provided."),
     );
-    card.append(errorBox);
+    summary.append(errorBox);
   }
 
   const items = classifications(record);
   const tags = element("div", "tags");
   for (const item of items.filter((item) => item.label === "yes")) {
-    tags.append(markCategory(element("span", "tag", item.category), item.category));
+    tags.append(resultClassificationTag(item));
   }
-  if (tags.childElementCount) card.append(tags);
+  if (tags.childElementCount) summary.append(tags);
   const evidenceItems = categories.length
     ? items.filter((item) => categories.includes(item.category))
     : items;
   const analysisSummary = categories.length ? null : summaryFor(record);
   const models = modelNames(record);
   const hasRow = record.row !== undefined && record.row !== null;
+  const details = element("div", "analysis-details");
   if (evidenceItems.length || analysisSummary || record.inclusion || models.length || hasRow) {
-    const details = element("details", "analysis-details");
-    const detailsLabel = element("summary");
-    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    icon.classList.add("icon");
-    icon.setAttribute("aria-hidden", "true");
-    icon.setAttribute("focusable", "false");
-    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
-    use.setAttribute("href", "./vendor/material-icons.svg#info");
-    icon.append(use);
-    detailsLabel.append(icon, " Details");
-    details.append(detailsLabel);
     if (models.length) {
       const modelTags = element("div", "tags model-tags");
       modelTags.setAttribute("role", "group");
@@ -445,18 +597,40 @@ function renderRecord(record, categories) {
       evidence.append(entry);
     }
     details.append(evidence);
-    card.append(details);
+  } else {
+    details.append(element("p", "help", "No analysis details available."));
   }
+  const additionalViews = additionalSummaryFields.map(({ field, label, icon }) => {
+    const value = record[field];
+    const panel = element("div", "additional-summary");
+    if (value != null && typeof value !== "string") {
+      console.warn(`Invalid ${field} for ${resourceName(record)}: expected text.`);
+      panel.append(element("p", "help", `${label} summary is invalid; expected text.`));
+    } else if (value?.trim()) {
+      panel.append(element("p", "description", value));
+    } else {
+      panel.append(element("p", "help", `No ${label.toLowerCase()} summary available.`));
+    }
+    return { label, panel, icon };
+  });
+  appendRecordTabs(card, [
+    { label: "Summary", panel: summary, icon: "description" },
+    ...additionalViews,
+    { label: "Details", panel: details, icon: "info" },
+  ], resourceName(record));
   return card;
 }
 
 function render() {
+  hideTagInfo();
   const categories = selectedCategories();
   const matches = filterRecords(records, {
     query: search.value,
     categories,
     status: status.value,
   });
+  currentMatches = matches;
+  exportOpen.disabled = matches.length === 0;
   matrixReset.disabled = categories.length === 0;
   chartReset.disabled = categories.length === 0;
   barChart.querySelectorAll("button").forEach(button => {
@@ -510,6 +684,8 @@ function changePage(offset) {
 }
 
 async function load() {
+  exportOpen.disabled = true;
+  currentMatches = [];
   chartReset.disabled = true;
   chartGroups.disabled = true;
   groupChartLabels.disabled = true;
@@ -537,6 +713,8 @@ async function load() {
     if (!response.ok)
       throw new Error(`Data request failed (HTTP ${response.status}).`);
     records = parseJSONL(await response.text());
+    availableExportColumns = exportColumns(records);
+    renderExportOptions();
     const categories = [
       ...new Set(
         records.flatMap((record) =>
@@ -599,6 +777,8 @@ async function load() {
     chartGroups.disabled = false;
     groupChartLabels.disabled = false;
   } catch (error) {
+    currentMatches = [];
+    exportOpen.disabled = true;
     list.replaceChildren();
     pagination.hidden = true;
     loadError.hidden = false;
@@ -618,11 +798,83 @@ async function load() {
   }
 }
 
+function renderExportOptions() {
+  exportOptions.replaceChildren();
+  for (const group of ["Initiative", "Summaries", "Classification reasons"]) {
+    const columns = availableExportColumns.filter(column => column.group === group);
+    if (!columns.length) continue;
+    const fieldset = element("fieldset", "export-group");
+    fieldset.append(element("legend", "", group));
+    for (const column of columns) {
+      const option = element("label", "classification-option");
+      const checkbox = element("input");
+      checkbox.type = "checkbox";
+      checkbox.value = column.id;
+      checkbox.checked = true;
+      option.append(checkbox, element("span", "", column.label));
+      fieldset.append(option);
+    }
+    exportOptions.append(fieldset);
+  }
+}
+
+exportOpen.addEventListener("click", () => {
+  exportError.hidden = true;
+  document.querySelector("#export-count").textContent =
+    `${currentMatches.length} matching ${currentMatches.length === 1 ? "initiative" : "initiatives"} will be exported.`;
+  exportDialog.showModal();
+});
+document.querySelector("#export-cancel").addEventListener("click", () => exportDialog.close());
+for (const [selector, checked] of [["#export-select-all", true], ["#export-select-none", false]]) {
+  document.querySelector(selector).addEventListener("click", () => {
+    exportOptions.querySelectorAll("input").forEach(input => { input.checked = checked; });
+    exportError.hidden = true;
+  });
+}
+exportForm.addEventListener("submit", event => {
+  event.preventDefault();
+  const selected = new Set([...exportOptions.querySelectorAll("input:checked")].map(input => input.value));
+  if (!selected.size) {
+    exportError.textContent = "Select at least one column to export.";
+    exportError.hidden = false;
+    return;
+  }
+  try {
+    const csv = recordsToCSV(currentMatches, availableExportColumns.filter(column => selected.has(column.id)));
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = element("a");
+    try {
+      link.href = url;
+      link.download = "ai-literacy-initiatives.csv";
+      document.body.append(link);
+      link.click();
+    } finally {
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    exportDialog.close();
+  } catch (error) {
+    console.error("CSV export failed:", error);
+    exportError.textContent = `Unable to export CSV: ${error.message}`;
+    exportError.hidden = false;
+  }
+});
+
 for (const group of categoryGroups) {
   const label = element("span", "tag", group.name);
   label.dataset.group = group.id;
   document.querySelector("#group-legend").append(label);
 }
+
+setupTabs(exploreTabs, exploreTabs.map(tab => document.getElementById(tab.getAttribute("aria-controls"))), index => {
+  if (index !== 1) {
+    hoveredHeatmapCell = null;
+    focusedHeatmapCell = null;
+    updateHeatmapHighlight();
+    matrixInfo.hidden = true;
+  }
+});
 
 groupMatrixLabels.addEventListener("change", () => {
   renderHeatmap();
@@ -634,10 +886,38 @@ for (const control of [groupChartLabels, chartGroups]) {
     render();
   });
 }
-window.addEventListener("scroll", () => { matrixInfo.hidden = true; }, true);
-window.addEventListener("resize", () => { matrixInfo.hidden = true; });
-document.querySelector(".matrix-panel").addEventListener("toggle", () => {
+tagInfo.addEventListener("mouseenter", () => {
+  overTagInfo = true;
+  clearTimeout(tagInfoTimer);
+});
+tagInfo.addEventListener("mouseleave", () => {
+  overTagInfo = false;
+  deferTagInfoUpdate();
+});
+document.addEventListener("click", event => {
+  if (activeResultTag && !tagInfo.contains(event.target) && !event.target.closest(".result-tag")) hideTagInfo();
+});
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && !tagInfo.hidden) {
+    hideTagInfo();
+    event.preventDefault();
+  }
+});
+window.addEventListener("scroll", event => {
   matrixInfo.hidden = true;
+  if (event.target !== tagInfo && !tagInfo.contains(event.target)) hideTagInfo();
+}, true);
+window.addEventListener("resize", () => {
+  matrixInfo.hidden = true;
+  hideTagInfo();
+});
+explorePanel.addEventListener("toggle", () => {
+  if (!explorePanel.open) {
+    hoveredHeatmapCell = null;
+    focusedHeatmapCell = null;
+    updateHeatmapHighlight();
+    matrixInfo.hidden = true;
+  }
 });
 for (const axis of [matrixRows, matrixColumns]) {
   axis.addEventListener("change", () => {
